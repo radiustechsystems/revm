@@ -196,8 +196,8 @@ impl JournaledState {
         db: &mut DB,
     ) -> Result<Option<InstructionResult>, EVMError<DB::Error>> {
         // load accounts
-        self.load_account(*from, db)?;
-        self.load_account(*to, db)?;
+        self.load_account(*from, db, true)?;
+        self.load_account(*to, db, true)?;
 
         // sub balance from
         let from_account = &mut self.state.get_mut(from).unwrap();
@@ -568,6 +568,7 @@ impl JournaledState {
         &mut self,
         address: Address,
         db: &mut DB,
+        write: bool,
     ) -> Result<(&mut Account, bool), EVMError<DB::Error>> {
         let (value, is_cold) = match self.state.entry(address) {
             Entry::Occupied(entry) => {
@@ -577,7 +578,7 @@ impl JournaledState {
             }
             Entry::Vacant(vac) => {
                 let account =
-                    if let Some(account) = db.basic(address, true).map_err(EVMError::Database)? {
+                    if let Some(account) = db.basic(address, write).map_err(EVMError::Database)? {
                         account.into()
                     } else {
                         Account::new_not_existing()
@@ -611,7 +612,7 @@ impl JournaledState {
         db: &mut DB,
     ) -> Result<LoadAccountResult, EVMError<DB::Error>> {
         let spec = self.spec;
-        let (acc, is_cold) = self.load_account(address, db)?;
+        let (acc, is_cold) = self.load_account(address, db, true)?;
 
         let is_spurious_dragon_enabled = SpecId::enabled(spec, SPURIOUS_DRAGON);
         let is_empty = if is_spurious_dragon_enabled {
@@ -632,7 +633,7 @@ impl JournaledState {
         address: Address,
         db: &mut DB,
     ) -> Result<(&mut Account, bool), EVMError<DB::Error>> {
-        let (acc, is_cold) = self.load_account(address, db)?;
+        let (acc, is_cold) = self.load_account(address, db, false)?;
         if acc.info.code.is_none() {
             if acc.info.code_hash == KECCAK_EMPTY {
                 let empty = Bytecode::default();

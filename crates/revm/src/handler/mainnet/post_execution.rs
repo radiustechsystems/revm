@@ -48,7 +48,7 @@ pub fn reward_beneficiary<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(beneficiary, &mut context.evm.inner.db)?;
+        .load_account(beneficiary, &mut context.evm.inner.db, true)?;
 
     coinbase_account.mark_touch();
     coinbase_account.info.balance = coinbase_account
@@ -72,7 +72,7 @@ pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(caller, &mut context.evm.inner.db)?;
+        .load_account(caller, &mut context.evm.inner.db, true)?;
 
     caller_account.info.balance = caller_account
         .info

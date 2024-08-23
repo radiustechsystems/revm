@@ -148,13 +148,14 @@ impl<DB: Database> InnerEvmContext<DB> {
         self.journaled_state.touch(address);
     }
 
-    /// Loads an account into memory. Returns `true` if it is cold accessed.
+    /// Loads an account into memory. Returns `true` if it is cold accessed. 
+    /// ------------ THIS SHOULD TAKE A R/W ARGUMENT ----------------------
     #[inline]
     pub fn load_account(
         &mut self,
         address: Address,
     ) -> Result<(&mut Account, bool), EVMError<DB::Error>> {
-        self.journaled_state.load_account(address, &mut self.db)
+        self.journaled_state.load_account(address, &mut self.db, true)
     }
 
     /// Load account from database to JournaledState.
@@ -173,7 +174,7 @@ impl<DB: Database> InnerEvmContext<DB> {
     #[inline]
     pub fn balance(&mut self, address: Address) -> Result<(U256, bool), EVMError<DB::Error>> {
         self.journaled_state
-            .load_account(address, &mut self.db)
+            .load_account(address, &mut self.db, true)
             .map(|(acc, is_cold)| (acc.info.balance, is_cold))
     }
 

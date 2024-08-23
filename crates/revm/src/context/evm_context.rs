@@ -177,7 +177,7 @@ impl<DB: Database> EvmContext<DB> {
         let _ = self
             .inner
             .journaled_state
-            .load_account(inputs.bytecode_address, &mut self.inner.db)?;
+            .load_account(inputs.bytecode_address, &mut self.inner.db, true)?;
 
         // Create subroutine checkpoint
         let checkpoint = self.journaled_state.checkpoint();

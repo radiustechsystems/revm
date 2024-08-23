@@ -71,7 +71,7 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
                     .evm
                     .inner
                     .journaled_state
-                    .load_account(authority, &mut context.evm.inner.db)?;
+                    .load_account(authority, &mut context.evm.inner.db, true)?;
 
                 // 3. Verify that the code of authority is empty.
                 // In case of multiple same authorities this step will skip loading of
@@ -157,7 +157,7 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(context.evm.inner.env.tx.caller, &mut context.evm.inner.db)?;
+        .load_account(context.evm.inner.env.tx.caller, &mut context.evm.inner.db, true)?;
 
     // deduct gas cost from caller's account.
     deduct_caller_inner::<SPEC>(caller_account, &context.evm.inner.env);
