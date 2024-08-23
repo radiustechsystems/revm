@@ -577,7 +577,6 @@ impl JournaledState {
                 (account, is_cold)
             }
             Entry::Vacant(vac) => {
-                println!("load_account: {:?}", address);
                 let account =
                     if let Some(account) = db.basic(address, write).map_err(EVMError::Database)? {
                         account.into()
