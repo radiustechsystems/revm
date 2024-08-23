@@ -183,7 +183,7 @@ impl<DB: Database> State<DB> {
                     }
                 }
                 // if not found in bundle, load it from database
-                let info = self.database.basic(address)?;
+                let info = self.database.basic(address, true)?;
                 let account = match info {
                     None => CacheAccount::new_loaded_not_existing(),
                     Some(acc) if acc.is_empty() => {
@@ -215,7 +215,7 @@ impl<DB: Database> State<DB> {
 impl<DB: Database> Database for State<DB> {
     type Error = DB::Error;
 
-    fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+    fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
         self.load_cache_account(address).map(|a| a.account_info())
     }
 
@@ -238,7 +238,7 @@ impl<DB: Database> Database for State<DB> {
         res
     }
 
-    fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+    fn storage(&mut self, address: Address, index: U256, _write: bool) -> Result<U256, Self::Error> {
         // Account is guaranteed to be loaded.
         // Note that storage from bundle is already loaded with account.
         if let Some(account) = self.cache.accounts.get_mut(&address) {
@@ -255,7 +255,7 @@ impl<DB: Database> Database for State<DB> {
                         let value = if is_storage_known {
                             U256::ZERO
                         } else {
-                            self.database.storage(address, index)?
+                            self.database.storage(address, index, true)?
                         };
                         entry.insert(value);
                         Ok(value)
