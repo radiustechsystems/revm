@@ -188,7 +188,7 @@ impl JournaledState {
 
     /// Transfers balance from two accounts. Returns error if sender balance is not enough.
     #[inline]
-    pub fn transfer<DB: Database>(
+    pub async fn transfer<DB: Database>(
         &mut self,
         from: &Address,
         to: &Address,
@@ -196,8 +196,8 @@ impl JournaledState {
         db: &mut DB,
     ) -> Result<Option<InstructionResult>, EVMError<DB::Error>> {
         // load accounts
-        self.load_account(*from, db, true)?;
-        self.load_account(*to, db, true)?;
+        self.load_account(*from, db, true).await?;
+        self.load_account(*to, db, true).await?;
 
         // sub balance from
         let from_account = &mut self.state.get_mut(from).unwrap();
@@ -472,13 +472,13 @@ impl JournaledState {
     ///  * <https://github.com/ethereum/go-ethereum/blob/141cd425310b503c5678e674a8c3872cf46b7086/core/state/statedb.go#L449>
     ///  * <https://eips.ethereum.org/EIPS/eip-6780>
     #[inline]
-    pub fn selfdestruct<DB: Database>(
+    pub async fn selfdestruct<DB: Database>(
         &mut self,
         address: Address,
         target: Address,
         db: &mut DB,
     ) -> Result<SelfDestructResult, EVMError<DB::Error>> {
-        let load_result = self.load_account_exist(target, db)?;
+        let load_result = self.load_account_exist(target, db).await?;
 
         if address != target {
             // Both accounts are loaded before this point, `address` as we execute its contract.
@@ -534,7 +534,7 @@ impl JournaledState {
 
     /// Initial load of account. This load will not be tracked inside journal
     #[inline]
-    pub fn initial_account_load<DB: Database>(
+    pub async fn initial_account_load<DB: Database>(
         &mut self,
         address: Address,
         storage_keys: impl IntoIterator<Item = U256>,
@@ -545,6 +545,7 @@ impl JournaledState {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(vac) => vac.insert(
                 db.basic(address, true)
+                    .await
                     .map_err(EVMError::Database)?
                     .map(|i| i.into())
                     .unwrap_or(Account::new_not_existing()),
@@ -555,6 +556,7 @@ impl JournaledState {
             if let Entry::Vacant(entry) = account.storage.entry(storage_key) {
                 let storage = db
                     .storage(address, storage_key, true)
+                    .await
                     .map_err(EVMError::Database)?;
                 entry.insert(EvmStorageSlot::new(storage));
             }
@@ -564,7 +566,7 @@ impl JournaledState {
 
     /// load account into memory. return if it is cold or warm accessed
     #[inline]
-    pub fn load_account<DB: Database>(
+    pub async fn load_account<DB: Database>(
         &mut self,
         address: Address,
         db: &mut DB,
@@ -577,12 +579,13 @@ impl JournaledState {
                 (account, is_cold)
             }
             Entry::Vacant(vac) => {
-                let account =
-                    if let Some(account) = db.basic(address, write).map_err(EVMError::Database)? {
-                        account.into()
-                    } else {
-                        Account::new_not_existing()
-                    };
+                let account = if let Some(account) =
+                    db.basic(address, write).await.map_err(EVMError::Database)?
+                {
+                    account.into()
+                } else {
+                    Account::new_not_existing()
+                };
 
                 // precompiles are warm loaded so we need to take that into account
                 let is_cold = !self.warm_preloaded_addresses.contains(&address);
@@ -606,13 +609,13 @@ impl JournaledState {
     ///
     /// Return boolean pair where first is `is_cold` second bool `is_exists`.
     #[inline]
-    pub fn load_account_exist<DB: Database>(
+    pub async fn load_account_exist<DB: Database>(
         &mut self,
         address: Address,
         db: &mut DB,
     ) -> Result<LoadAccountResult, EVMError<DB::Error>> {
         let spec = self.spec;
-        let (acc, is_cold) = self.load_account(address, db, true)?;
+        let (acc, is_cold) = self.load_account(address, db, true).await?;
 
         let is_spurious_dragon_enabled = SpecId::enabled(spec, SPURIOUS_DRAGON);
         let is_empty = if is_spurious_dragon_enabled {
@@ -628,12 +631,12 @@ impl JournaledState {
 
     /// Loads code.
     #[inline]
-    pub fn load_code<DB: Database>(
+    pub async fn load_code<DB: Database>(
         &mut self,
         address: Address,
         db: &mut DB,
     ) -> Result<(&mut Account, bool), EVMError<DB::Error>> {
-        let (acc, is_cold) = self.load_account(address, db, false)?;
+        let (acc, is_cold) = self.load_account(address, db, false).await?;
         if acc.info.code.is_none() {
             if acc.info.code_hash == KECCAK_EMPTY {
                 let empty = Bytecode::default();
@@ -641,6 +644,7 @@ impl JournaledState {
             } else {
                 let code = db
                     .code_by_hash(acc.info.code_hash)
+                    .await
                     .map_err(EVMError::Database)?;
                 acc.info.code = Some(code);
             }
@@ -654,7 +658,7 @@ impl JournaledState {
     ///
     /// Panics if the account is not present in the state.
     #[inline]
-    pub fn sload<DB: Database>(
+    pub async fn sload<DB: Database>(
         &mut self,
         address: Address,
         key: U256,
@@ -675,7 +679,9 @@ impl JournaledState {
                 let value = if is_newly_created {
                     U256::ZERO
                 } else {
-                    db.storage(address, key, true).map_err(EVMError::Database)?
+                    db.storage(address, key, true)
+                        .await
+                        .map_err(EVMError::Database)?
                 };
 
                 vac.insert(EvmStorageSlot::new(value));
@@ -702,7 +708,7 @@ impl JournaledState {
     ///
     /// account should already be present in our state.
     #[inline]
-    pub fn sstore<DB: Database>(
+    pub async fn sstore<DB: Database>(
         &mut self,
         address: Address,
         key: U256,
@@ -710,7 +716,7 @@ impl JournaledState {
         db: &mut DB,
     ) -> Result<SStoreResult, EVMError<DB::Error>> {
         // assume that acc exists and load the slot.
-        let (present, is_cold) = self.sload(address, key, db)?;
+        let (present, is_cold) = self.sload(address, key, db).await?;
         let acc = self.state.get_mut(&address).unwrap();
 
         // if there is no original value in dirty return present value, that is our original.

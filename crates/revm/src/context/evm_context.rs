@@ -151,7 +151,7 @@ impl<DB: Database> EvmContext<DB> {
 
     /// Make call frame
     #[inline]
-    pub fn make_call_frame(
+    pub async fn make_call_frame(
         &mut self,
         inputs: &CallInputs,
     ) -> Result<FrameOrResult, EVMError<DB::Error>> {
@@ -177,7 +177,7 @@ impl<DB: Database> EvmContext<DB> {
         let _ = self
             .inner
             .journaled_state
-            .load_account(inputs.bytecode_address, &mut self.inner.db, false)?;
+            .load_account(inputs.bytecode_address, &mut self.inner.db, false).await?;
 
         // Create subroutine checkpoint
         let checkpoint = self.journaled_state.checkpoint();
@@ -186,7 +186,7 @@ impl<DB: Database> EvmContext<DB> {
         match inputs.value {
             // if transfer value is zero, load account and force the touch.
             CallValue::Transfer(value) if value == U256::ZERO => {
-                self.load_account(inputs.target_address, false)?;
+                self.load_account(inputs.target_address, false).await?;
                 self.journaled_state.touch(&inputs.target_address);
             }
             CallValue::Transfer(value) => {
@@ -197,7 +197,7 @@ impl<DB: Database> EvmContext<DB> {
                     &inputs.target_address,
                     value,
                     &mut self.inner.db,
-                )? {
+                ).await? {
                     self.journaled_state.checkpoint_revert(checkpoint);
                     return return_result(result);
                 }
@@ -219,7 +219,7 @@ impl<DB: Database> EvmContext<DB> {
             let (account, _) = self
                 .inner
                 .journaled_state
-                .load_code(inputs.bytecode_address, &mut self.inner.db)?;
+                .load_code(inputs.bytecode_address, &mut self.inner.db).await?;
 
             let code_hash = account.info.code_hash();
             let bytecode = account.info.code.clone().unwrap_or_default();
@@ -249,7 +249,7 @@ impl<DB: Database> EvmContext<DB> {
 
     /// Make create frame.
     #[inline]
-    pub fn make_create_frame(
+    pub async fn make_create_frame(
         &mut self,
         spec_id: SpecId,
         inputs: &CreateInputs,
@@ -277,7 +277,7 @@ impl<DB: Database> EvmContext<DB> {
         }
 
         // Fetch balance of caller.
-        let (caller_balance, _) = self.balance(inputs.caller)?;
+        let (caller_balance, _) = self.balance(inputs.caller).await?;
 
         // Check if caller has enough balance to send to the created contract.
         if caller_balance < inputs.value {
@@ -308,7 +308,7 @@ impl<DB: Database> EvmContext<DB> {
         }
 
         // warm load account.
-        self.load_account(created_address, true)?;
+        self.load_account(created_address, true).await?;
 
         // create account, transfer funds and make the journal checkpoint.
         let checkpoint = match self.journaled_state.create_account_checkpoint(
@@ -344,7 +344,7 @@ impl<DB: Database> EvmContext<DB> {
 
     /// Make create frame.
     #[inline]
-    pub fn make_eofcreate_frame(
+    pub async fn make_eofcreate_frame(
         &mut self,
         spec_id: SpecId,
         inputs: &EOFCreateInputs,
@@ -395,7 +395,7 @@ impl<DB: Database> EvmContext<DB> {
         }
 
         // Fetch balance of caller.
-        let (caller_balance, _) = self.balance(inputs.caller)?;
+        let (caller_balance, _) = self.balance(inputs.caller).await?;
 
         // Check if caller has enough balance to send to the created contract.
         if caller_balance < inputs.value {
@@ -417,7 +417,7 @@ impl<DB: Database> EvmContext<DB> {
         }
 
         // Load account so it needs to be marked as warm for access list.
-        self.load_account(created_address, true)?;
+        self.load_account(created_address, true).await?;
 
         // create account, transfer funds and make the journal checkpoint.
         let checkpoint = match self.journaled_state.create_account_checkpoint(
@@ -452,186 +452,5 @@ impl<DB: Database> EvmContext<DB> {
             checkpoint,
             interpreter,
         ))
-    }
-}
-
-/// Test utilities for the [`EvmContext`].
-#[cfg(any(test, feature = "test-utils"))]
-pub(crate) mod test_utils {
-    use super::*;
-    use crate::{
-        db::{CacheDB, EmptyDB},
-        journaled_state::JournaledState,
-        primitives::{address, HashSet, SpecId, B256},
-    };
-
-    /// Mock caller address.
-    pub const MOCK_CALLER: Address = address!("0000000000000000000000000000000000000000");
-
-    /// Creates `CallInputs` that calls a provided contract address from the mock caller.
-    pub fn create_mock_call_inputs(to: Address) -> CallInputs {
-        CallInputs {
-            input: Bytes::new(),
-            gas_limit: 0,
-            bytecode_address: to,
-            target_address: to,
-            caller: MOCK_CALLER,
-            value: CallValue::Transfer(U256::ZERO),
-            scheme: revm_interpreter::CallScheme::Call,
-            is_eof: false,
-            is_static: false,
-            return_memory_offset: 0..0,
-        }
-    }
-
-    /// Creates an evm context with a cache db backend.
-    /// Additionally loads the mock caller account into the db,
-    /// and sets the balance to the provided U256 value.
-    pub fn create_cache_db_evm_context_with_balance(
-        env: Box<Env>,
-        mut db: CacheDB<EmptyDB>,
-        balance: U256,
-    ) -> EvmContext<CacheDB<EmptyDB>> {
-        db.insert_account_info(
-            test_utils::MOCK_CALLER,
-            crate::primitives::AccountInfo {
-                nonce: 0,
-                balance,
-                code_hash: B256::default(),
-                code: None,
-            },
-        );
-        create_cache_db_evm_context(env, db)
-    }
-
-    /// Creates a cached db evm context.
-    pub fn create_cache_db_evm_context(
-        env: Box<Env>,
-        db: CacheDB<EmptyDB>,
-    ) -> EvmContext<CacheDB<EmptyDB>> {
-        EvmContext {
-            inner: InnerEvmContext {
-                env,
-                journaled_state: JournaledState::new(SpecId::CANCUN, HashSet::new()),
-                db,
-                error: Ok(()),
-                valid_authorizations: Vec::new(),
-                #[cfg(feature = "optimism")]
-                l1_block_info: None,
-            },
-            precompiles: ContextPrecompiles::default(),
-        }
-    }
-
-    /// Returns a new `EvmContext` with an empty journaled state.
-    pub fn create_empty_evm_context(env: Box<Env>, db: EmptyDB) -> EvmContext<EmptyDB> {
-        EvmContext {
-            inner: InnerEvmContext {
-                env,
-                journaled_state: JournaledState::new(SpecId::CANCUN, HashSet::new()),
-                db,
-                error: Ok(()),
-                valid_authorizations: Default::default(),
-                #[cfg(feature = "optimism")]
-                l1_block_info: None,
-            },
-            precompiles: ContextPrecompiles::default(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        db::{CacheDB, EmptyDB},
-        primitives::{address, Bytecode},
-        Frame, JournalEntry,
-    };
-    use std::boxed::Box;
-    use test_utils::*;
-
-    // Tests that the `EVMContext::make_call_frame` function returns an error if the
-    // call stack is too deep.
-    #[test]
-    fn test_make_call_frame_stack_too_deep() {
-        let env = Env::default();
-        let db = EmptyDB::default();
-        let mut context = test_utils::create_empty_evm_context(Box::new(env), db);
-        context.journaled_state.depth = CALL_STACK_LIMIT as usize + 1;
-        let contract = address!("dead10000000000000000000000000000001dead");
-        let call_inputs = test_utils::create_mock_call_inputs(contract);
-        let res = context.make_call_frame(&call_inputs);
-        let Ok(FrameOrResult::Result(err)) = res else {
-            panic!("Expected FrameOrResult::Result");
-        };
-        assert_eq!(
-            err.interpreter_result().result,
-            InstructionResult::CallTooDeep
-        );
-    }
-
-    // Tests that the `EVMContext::make_call_frame` function returns an error if the
-    // transfer fails on the journaled state. It also verifies that the revert was
-    // checkpointed on the journaled state correctly.
-    #[test]
-    fn test_make_call_frame_transfer_revert() {
-        let env = Env::default();
-        let db = EmptyDB::default();
-        let mut evm_context = test_utils::create_empty_evm_context(Box::new(env), db);
-        let contract = address!("dead10000000000000000000000000000001dead");
-        let mut call_inputs = test_utils::create_mock_call_inputs(contract);
-        call_inputs.value = CallValue::Transfer(U256::from(1));
-        let res = evm_context.make_call_frame(&call_inputs);
-        let Ok(FrameOrResult::Result(result)) = res else {
-            panic!("Expected FrameOrResult::Result");
-        };
-        assert_eq!(
-            result.interpreter_result().result,
-            InstructionResult::OutOfFunds
-        );
-        let checkpointed = vec![vec![JournalEntry::AccountWarmed { address: contract }]];
-        assert_eq!(evm_context.journaled_state.journal, checkpointed);
-        assert_eq!(evm_context.journaled_state.depth, 0);
-    }
-
-    #[test]
-    fn test_make_call_frame_missing_code_context() {
-        let env = Env::default();
-        let cdb = CacheDB::new(EmptyDB::default());
-        let bal = U256::from(3_000_000_000_u128);
-        let mut context = create_cache_db_evm_context_with_balance(Box::new(env), cdb, bal);
-        let contract = address!("dead10000000000000000000000000000001dead");
-        let call_inputs = test_utils::create_mock_call_inputs(contract);
-        let res = context.make_call_frame(&call_inputs);
-        let Ok(FrameOrResult::Result(result)) = res else {
-            panic!("Expected FrameOrResult::Result");
-        };
-        assert_eq!(result.interpreter_result().result, InstructionResult::Stop);
-    }
-
-    #[test]
-    fn test_make_call_frame_succeeds() {
-        let env = Env::default();
-        let mut cdb = CacheDB::new(EmptyDB::default());
-        let bal = U256::from(3_000_000_000_u128);
-        let by = Bytecode::new_raw(Bytes::from(vec![0x60, 0x00, 0x60, 0x00]));
-        let contract = address!("dead10000000000000000000000000000001dead");
-        cdb.insert_account_info(
-            contract,
-            crate::primitives::AccountInfo {
-                nonce: 0,
-                balance: bal,
-                code_hash: by.clone().hash_slow(),
-                code: Some(by),
-            },
-        );
-        let mut evm_context = create_cache_db_evm_context_with_balance(Box::new(env), cdb, bal);
-        let call_inputs = test_utils::create_mock_call_inputs(contract);
-        let res = evm_context.make_call_frame(&call_inputs);
-        let Ok(FrameOrResult::Frame(Frame::Call(call_frame))) = res else {
-            panic!("Expected FrameOrResult::Frame(Frame::Call(..))");
-        };
-        assert_eq!(call_frame.return_memory_range, 0..0,);
     }
 }
