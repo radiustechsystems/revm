@@ -128,7 +128,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
 }
 
 impl<ExtDB> DatabaseCommit for CacheDB<ExtDB> {
-    fn commit(&mut self, changes: HashMap<Address, Account>) {
+    async fn commit(&mut self, changes: HashMap<Address, Account>) {
         for (address, mut account) in changes {
             if !account.is_touched() {
                 continue;
@@ -168,7 +168,7 @@ impl<ExtDB> DatabaseCommit for CacheDB<ExtDB> {
 impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
-    fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
+    async fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
         let basic = match self.accounts.entry(address) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(
@@ -184,7 +184,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
         Ok(basic.info())
     }
 
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+    async fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         match self.contracts.entry(code_hash) {
             Entry::Occupied(entry) => Ok(entry.get().clone()),
             Entry::Vacant(entry) => {
@@ -197,7 +197,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     /// Get the value in an account's storage slot.
     ///
     /// It is assumed that account is already loaded.
-    fn storage(&mut self, address: Address, index: U256, _write: bool) -> Result<U256, Self::Error> {
+    async fn storage(&mut self, address: Address, index: U256, _write: bool) -> Result<U256, Self::Error> {
         match self.accounts.entry(address) {
             Entry::Occupied(mut acc_entry) => {
                 let acc_entry = acc_entry.get_mut();
@@ -234,7 +234,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
         }
     }
 
-    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+    async fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         match self.block_hashes.entry(U256::from(number)) {
             Entry::Occupied(entry) => Ok(*entry.get()),
             Entry::Vacant(entry) => {
@@ -372,7 +372,7 @@ impl BenchmarkDB {
 impl Database for BenchmarkDB {
     type Error = Infallible;
     /// Get basic account information.
-    fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
+    async fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
         if address == Address::ZERO {
             return Ok(Some(AccountInfo {
                 nonce: 1,
@@ -393,17 +393,17 @@ impl Database for BenchmarkDB {
     }
 
     /// Get account code by its hash
-    fn code_by_hash(&mut self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
+    async fn code_by_hash(&mut self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
         Ok(Bytecode::default())
     }
 
     /// Get storage value of address at index.
-    fn storage(&mut self, _address: Address, _index: U256, _write: bool) -> Result<U256, Self::Error> {
+    async fn storage(&mut self, _address: Address, _index: U256, _write: bool) -> Result<U256, Self::Error> {
         Ok(U256::default())
     }
 
     // History related
-    fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
+    async fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
         Ok(B256::default())
     }
 }
@@ -413,8 +413,8 @@ mod tests {
     use super::{CacheDB, EmptyDB};
     use crate::primitives::{db::Database, AccountInfo, Address, U256};
 
-    #[test]
-    fn test_insert_account_storage() {
+    #[tokio::test]
+    async fn test_insert_account_storage() {
         let account = Address::with_last_byte(42);
         let nonce = 42;
         let mut init_state = CacheDB::new(EmptyDB::default());
@@ -432,12 +432,12 @@ mod tests {
             .insert_account_storage(account, key, value)
             .unwrap();
 
-        assert_eq!(new_state.basic(account, true).unwrap().unwrap().nonce, nonce);
-        assert_eq!(new_state.storage(account, key, true), Ok(value));
+        assert_eq!(new_state.basic(account, true).await.unwrap().unwrap().nonce, nonce);
+        assert_eq!(new_state.storage(account, key, true).await, Ok(value));
     }
 
-    #[test]
-    fn test_replace_account_storage() {
+    #[tokio::test]
+    async fn test_replace_account_storage() {
         let account = Address::with_last_byte(42);
         let nonce = 42;
         let mut init_state = CacheDB::new(EmptyDB::default());
@@ -460,9 +460,9 @@ mod tests {
             .replace_account_storage(account, [(key1, value1)].into())
             .unwrap();
 
-        assert_eq!(new_state.basic(account, true).unwrap().unwrap().nonce, nonce);
-        assert_eq!(new_state.storage(account, key0, true), Ok(U256::ZERO));
-        assert_eq!(new_state.storage(account, key1, true), Ok(value1));
+        assert_eq!(new_state.basic(account, true).await.unwrap().unwrap().nonce, nonce);
+        assert_eq!(new_state.storage(account, key0, true).await, Ok(U256::ZERO));
+        assert_eq!(new_state.storage(account, key1, true).await, Ok(value1));
     }
 
     #[cfg(feature = "serde-json")]

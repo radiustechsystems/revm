@@ -3,7 +3,7 @@ use crate::{
     Host, SStoreResult, SelfDestructResult,
 };
 use std::vec::Vec;
-
+use async_trait::async_trait;
 use super::LoadAccountResult;
 
 /// A dummy [Host] implementation.
@@ -33,6 +33,7 @@ impl DummyHost {
     }
 }
 
+#[async_trait]
 impl Host for DummyHost {
     #[inline]
     fn env(&self) -> &Env {

@@ -1,7 +1,7 @@
 use crate::{
     interpreter::{Gas, SuccessOrHalt},
     primitives::{
-        db::Database, Bytecode, EVMError, ExecutionResult, ResultAndState, Spec, SpecId::LONDON,
+        db::Database, Bytecode, EVMError, ExecutionResult, ResultAndState, Spec,
         KECCAK_EMPTY, U256,
     },
     Context, FrameResult,
@@ -60,7 +60,7 @@ pub fn reward_beneficiary<SPEC: Spec, EXT, DB: Database>(
 }
 
 #[inline]
-pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
+pub async fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
     gas: &Gas,
 ) -> Result<(), EVMError<DB::Error>> {
@@ -72,7 +72,7 @@ pub fn reimburse_caller<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(caller, &mut context.evm.inner.db, true)?;
+        .load_account(caller, &mut context.evm.inner.db, true).await?;
 
     caller_account.info.balance = caller_account
         .info

@@ -84,12 +84,12 @@ impl<DB: Database> StateBuilder<DB> {
     }
 
     /// With boxed version of database.
-    pub fn with_database_boxed<Error>(
-        self,
-        database: DBBox<'_, Error>,
-    ) -> StateBuilder<DBBox<'_, Error>> {
-        self.with_database(database)
-    }
+    // pub fn with_database_boxed<Error>(
+    //     self,
+    //     database: DBBox<'_, Error>,
+    // ) -> StateBuilder<DBBox<'_, Error>> {
+    //     self.with_database(database)
+    // }
 
     /// By default state clear flag is enabled but for initial sync on mainnet
     /// we want to disable it so proper consensus changes are in place.

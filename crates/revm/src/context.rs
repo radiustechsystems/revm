@@ -108,7 +108,7 @@ impl<EXT, DB: Database> Host for Context<EXT, DB> {
         &mut self.evm.env
     }
 
-    fn block_hash(&mut self, number: u64) -> Option<B256> {
+    async fn block_hash(&mut self, number: u64) -> Option<B256> {
         let block_number = as_usize_saturated!(self.env().block.number);
         let requested_number = usize::try_from(number).unwrap_or(usize::MAX);
 
@@ -125,6 +125,7 @@ impl<EXT, DB: Database> Host for Context<EXT, DB> {
             return self
                 .evm
                 .block_hash(number)
+                .await
                 .map_err(|e| self.evm.error = Err(e))
                 .ok();
         }

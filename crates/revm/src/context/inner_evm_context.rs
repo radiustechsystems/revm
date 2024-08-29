@@ -104,17 +104,19 @@ impl<DB: Database> InnerEvmContext<DB> {
     ///
     /// Loading of accounts/storages is needed to make them warm.
     #[inline]
-    pub fn load_access_list(&mut self) -> Result<(), EVMError<DB::Error>> {
+    pub async fn load_access_list(&mut self) -> Result<(), EVMError<DB::Error>> {
         for AccessListItem {
             address,
             storage_keys,
         } in self.env.tx.access_list.iter()
         {
-            self.journaled_state.initial_account_load(
-                *address,
-                storage_keys.iter().map(|i| U256::from_be_bytes(i.0)),
-                &mut self.db,
-            )?;
+            self.journaled_state
+                .initial_account_load(
+                    *address,
+                    storage_keys.iter().map(|i| U256::from_be_bytes(i.0)),
+                    &mut self.db,
+                )
+                .await?;
         }
         Ok(())
     }
@@ -138,8 +140,8 @@ impl<DB: Database> InnerEvmContext<DB> {
 
     /// Fetch block hash from database.
     #[inline]
-    pub fn block_hash(&mut self, number: u64) -> Result<B256, EVMError<DB::Error>> {
-        self.db.block_hash(number).map_err(EVMError::Database)
+    pub async fn block_hash(&mut self, number: u64) -> Result<B256, EVMError<DB::Error>> {
+        self.db.block_hash(number).await.map_err(EVMError::Database)
     }
 
     /// Mark account as touched as only touched accounts will be added to state.
@@ -148,34 +150,38 @@ impl<DB: Database> InnerEvmContext<DB> {
         self.journaled_state.touch(address);
     }
 
-    /// Loads an account into memory. Returns `true` if it is cold accessed. 
+    /// Loads an account into memory. Returns `true` if it is cold accessed.
     /// ------------ THIS SHOULD TAKE A R/W ARGUMENT ----------------------
     #[inline]
-    pub fn load_account(
+    pub async fn load_account(
         &mut self,
         address: Address,
         write: bool,
     ) -> Result<(&mut Account, bool), EVMError<DB::Error>> {
-        self.journaled_state.load_account(address, &mut self.db, write)
+        self.journaled_state
+            .load_account(address, &mut self.db, write)
+            .await
     }
 
     /// Load account from database to JournaledState.
     ///
     /// Return boolean pair where first is `is_cold` second bool `exists`.
     #[inline]
-    pub fn load_account_exist(
+    pub async fn load_account_exist(
         &mut self,
         address: Address,
     ) -> Result<LoadAccountResult, EVMError<DB::Error>> {
         self.journaled_state
             .load_account_exist(address, &mut self.db)
+            .await
     }
 
     /// Return account balance and is_cold flag.
     #[inline]
-    pub fn balance(&mut self, address: Address) -> Result<(U256, bool), EVMError<DB::Error>> {
+    pub async fn balance(&mut self, address: Address) -> Result<(U256, bool), EVMError<DB::Error>> {
         self.journaled_state
             .load_account(address, &mut self.db, true)
+            .await
             .map(|(acc, is_cold)| (acc.info.balance, is_cold))
     }
 
@@ -183,9 +189,10 @@ impl<DB: Database> InnerEvmContext<DB> {
     ///
     /// In case of EOF account it will return `EOF_MAGIC` (0xEF00) as code.
     #[inline]
-    pub fn code(&mut self, address: Address) -> Result<(Bytes, bool), EVMError<DB::Error>> {
+    pub async fn code(&mut self, address: Address) -> Result<(Bytes, bool), EVMError<DB::Error>> {
         self.journaled_state
             .load_code(address, &mut self.db)
+            .await
             .map(|(a, is_cold)| {
                 // SAFETY: safe to unwrap as load_code will insert code if it is empty.
                 let code = a.info.code.as_ref().unwrap();
@@ -202,8 +209,14 @@ impl<DB: Database> InnerEvmContext<DB> {
     /// In case of EOF account it will return `EOF_MAGIC_HASH`
     /// (the hash of `0xEF00`).
     #[inline]
-    pub fn code_hash(&mut self, address: Address) -> Result<(B256, bool), EVMError<DB::Error>> {
-        let (acc, is_cold) = self.journaled_state.load_code(address, &mut self.db)?;
+    pub async fn code_hash(
+        &mut self,
+        address: Address,
+    ) -> Result<(B256, bool), EVMError<DB::Error>> {
+        let (acc, is_cold) = self
+            .journaled_state
+            .load_code(address, &mut self.db)
+            .await?;
         if acc.is_empty() {
             return Ok((B256::ZERO, is_cold));
         }
@@ -221,7 +234,10 @@ impl<DB: Database> InnerEvmContext<DB> {
         index: U256,
     ) -> Result<(U256, bool), EVMError<DB::Error>> {
         // account is always warm. reference on that statement https://eips.ethereum.org/EIPS/eip-2929 see `Note 2:`
-        self.journaled_state.sload(address, index, &mut self.db)
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::block_in_place(move || {
+            handle.block_on(self.journaled_state.sload(address, index, &mut self.db))
+        })
     }
 
     /// Storage change of storage slot, before storing `sload` will be called for that slot.
@@ -232,8 +248,13 @@ impl<DB: Database> InnerEvmContext<DB> {
         index: U256,
         value: U256,
     ) -> Result<SStoreResult, EVMError<DB::Error>> {
-        self.journaled_state
-            .sstore(address, index, value, &mut self.db)
+        let handle = tokio::runtime::Handle::current();
+        tokio::task::block_in_place(move || {
+            handle.block_on(
+                self.journaled_state
+                    .sstore(address, index, value, &mut self.db),
+            )
+        })
     }
 
     /// Returns transient storage value.
@@ -250,13 +271,13 @@ impl<DB: Database> InnerEvmContext<DB> {
 
     /// Selfdestructs the account.
     #[inline]
-    pub fn selfdestruct(
+    pub async fn selfdestruct(
         &mut self,
         address: Address,
         target: Address,
     ) -> Result<SelfDestructResult, EVMError<DB::Error>> {
         self.journaled_state
-            .selfdestruct(address, target, &mut self.db)
+            .selfdestruct(address, target, &mut self.db).await
     }
 
     /// If error is present revert changes, otherwise save EOF bytecode.

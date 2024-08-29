@@ -57,22 +57,22 @@ impl<E> Database for EmptyDBTyped<E> {
     type Error = E;
 
     #[inline]
-    fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
+    async fn basic(&mut self, address: Address, _write: bool) -> Result<Option<AccountInfo>, Self::Error> {
         <Self as DatabaseRef>::basic_ref(self, address)
     }
 
     #[inline]
-    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+    async fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         <Self as DatabaseRef>::code_by_hash_ref(self, code_hash)
     }
 
     #[inline]
-    fn storage(&mut self, address: Address, index: U256, _write: bool) -> Result<U256, Self::Error> {
+    async fn storage(&mut self, address: Address, index: U256, _write: bool) -> Result<U256, Self::Error> {
         <Self as DatabaseRef>::storage_ref(self, address, index)
     }
 
     #[inline]
-    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+    async fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         <Self as DatabaseRef>::block_hash_ref(self, number)
     }
 }

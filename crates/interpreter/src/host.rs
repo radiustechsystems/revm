@@ -1,9 +1,11 @@
 use crate::primitives::{Address, Bytes, Env, Log, B256, U256};
+use async_trait::async_trait;
 
 mod dummy;
 pub use dummy::DummyHost;
 
 /// EVM context host.
+#[async_trait]
 pub trait Host {
     /// Returns a reference to the environment.
     fn env(&self) -> &Env;
@@ -91,6 +93,6 @@ mod tests {
     #[test]
     fn object_safety() {
         assert_host::<DummyHost>();
-        assert_host::<dyn Host>();
+        assert_host::<dyn Host>(); // Async functions are not object safe in traits currently
     }
 }

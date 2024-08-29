@@ -26,6 +26,7 @@ alloy-eips = { version = "0.2", default-features = false, features = ["k256"] }
 alloy-primitives = { version = "0.7.7", default-features = false, features = [
     "rlp",
 ] }
+async-trait = "0.1"
 hashbrown = "0.14"
 auto_impl = "1.2"
 bitvec = { version = "1", default-features = false, features = ["alloc"] }

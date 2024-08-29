@@ -222,6 +222,20 @@ impl OpCode {
                 | OpCode::STATICCALL
         )
     }
+
+    /// Returns true if the opcode requires a database access.
+    #[inline]
+    pub const fn requires_db_access(&self) -> bool {
+        matches!(
+            *self,
+            OpCode::SLOAD
+                | OpCode::BALANCE
+                | OpCode::EXTCODESIZE
+                | OpCode::EXTCODECOPY
+                | OpCode::CALLCODE
+                | OpCode::CALL
+        )
+    }
 }
 
 /// Information about opcode, such as name, and stack inputs and outputs.
@@ -491,7 +505,7 @@ opcodes! {
     0x3D => RETURNDATASIZE => system::returndatasize::<H, SPEC> => stack_io(0, 1);
     0x3E => RETURNDATACOPY => system::returndatacopy::<H, SPEC> => stack_io(3, 0);
     0x3F => EXTCODEHASH    => host::extcodehash::<H, SPEC>      => stack_io(1, 1), not_eof;
-    0x40 => BLOCKHASH      => host::blockhash::<H, SPEC>          => stack_io(1, 1);
+    0x40 => BLOCKHASH      => host::blockhash::<H, SPEC>          => stack_io(0, 1); // Disabling because we do not use this in parsec
     0x41 => COINBASE       => host_env::coinbase                => stack_io(0, 1);
     0x42 => TIMESTAMP      => host_env::timestamp               => stack_io(0, 1);
     0x43 => NUMBER         => host_env::block_number            => stack_io(0, 1);

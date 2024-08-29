@@ -3012,6 +3012,7 @@ dependencies = [
  "alloy-sol-types",
  "alloy-transport",
  "anyhow",
+ "async-trait",
  "auto_impl",
  "cfg-if",
  "criterion",
@@ -3033,6 +3034,7 @@ dependencies = [
 name = "revm-interpreter"
 version = "8.1.0"
 dependencies = [
+ "async-trait",
  "bincode",
  "paste",
  "phf",
@@ -3074,6 +3076,7 @@ version = "7.1.0"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
+ "async-trait",
  "auto_impl",
  "bitflags 2.6.0",
  "bitvec",

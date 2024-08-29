@@ -480,9 +480,11 @@ mod tests {
             &crate::opcode::make_instruction_table::<DummyHost, CancunSpec>();
         let _ = interp.run(EMPTY_SHARED_MEMORY, table, &mut host);
 
-        let host: &mut dyn Host = &mut host as &mut dyn Host;
-        let table: &InstructionTable<dyn Host> =
-            &crate::opcode::make_instruction_table::<dyn Host, CancunSpec>();
-        let _ = interp.run(EMPTY_SHARED_MEMORY, table, host);
+
+        // Host is an async trait, which is not currently "safe" in rust.
+        // let host: &mut dyn Host = &mut host as &mut dyn Host;
+        // let table: &InstructionTable<dyn Host> =
+        //     &crate::opcode::make_instruction_table::<dyn Host, CancunSpec>();
+        // let _ = interp.run(EMPTY_SHARED_MEMORY, table, host);
     }
 }

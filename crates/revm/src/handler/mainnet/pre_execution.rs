@@ -22,7 +22,7 @@ pub fn load_precompiles<SPEC: Spec, DB: Database>() -> ContextPrecompiles<DB> {
 
 /// Main load handle
 #[inline]
-pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
+pub async fn load_accounts<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
 ) -> Result<(), EVMError<DB::Error>> {
     // set journaling state flag.
@@ -71,7 +71,8 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
                     .evm
                     .inner
                     .journaled_state
-                    .load_account(authority, &mut context.evm.inner.db, true)?;
+                    .load_account(authority, &mut context.evm.inner.db, true)
+                    .await?;
 
                 // 3. Verify that the code of authority is empty.
                 // In case of multiple same authorities this step will skip loading of
@@ -93,7 +94,8 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
                     .evm
                     .inner
                     .journaled_state
-                    .load_code(authorization.address, &mut context.evm.inner.db)?;
+                    .load_code(authorization.address, &mut context.evm.inner.db)
+                    .await?;
                 let code = account.info.code.clone();
                 let code_hash = account.info.code_hash;
 
@@ -117,7 +119,7 @@ pub fn load_accounts<SPEC: Spec, EXT, DB: Database>(
         }
     }
 
-    context.evm.load_access_list()?;
+    context.evm.load_access_list().await?;
     Ok(())
 }
 
@@ -149,7 +151,7 @@ pub fn deduct_caller_inner<SPEC: Spec>(caller_account: &mut Account, env: &Env) 
 
 /// Deducts the caller balance to the transaction limit.
 #[inline]
-pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
+pub async fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
 ) -> Result<(), EVMError<DB::Error>> {
     // load caller's account.
@@ -157,7 +159,12 @@ pub fn deduct_caller<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(context.evm.inner.env.tx.caller, &mut context.evm.inner.db, true)?;
+        .load_account(
+            context.evm.inner.env.tx.caller,
+            &mut context.evm.inner.db,
+            true,
+        )
+        .await?;
 
     // deduct gas cost from caller's account.
     deduct_caller_inner::<SPEC>(caller_account, &context.evm.inner.env);

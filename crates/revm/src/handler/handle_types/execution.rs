@@ -9,6 +9,8 @@ use revm_interpreter::{
     opcode::InstructionTables, CallOutcome, CreateOutcome, EOFCreateInputs, InterpreterAction,
     InterpreterResult,
 };
+use std::future::Future;
+use std::pin::Pin;
 use std::{boxed::Box, sync::Arc};
 
 /// Handles first frame return handle.
@@ -34,6 +36,21 @@ pub type FrameCallHandle<'a, EXT, DB> = Arc<
             &mut Context<EXT, DB>,
             Box<CallInputs>,
         ) -> Result<FrameOrResult, EVMError<<DB as Database>::Error>>
+        + 'a,
+>;
+
+/// Handle async sub call.
+pub type FrameAsyncCallHandle<'a, EXT, DB> = Arc<
+    dyn Fn(
+            &mut Context<EXT, DB>,
+            Box<CallInputs>,
+        ) -> Pin<
+            Box<
+                dyn Future<Output = Result<FrameOrResult, EVMError<<DB as Database>::Error>>>
+                    + Send,
+            >,
+        > + Send
+        + Sync
         + 'a,
 >;
 
@@ -124,7 +141,7 @@ pub struct ExecutionHandler<'a, EXT, DB: Database> {
     /// Executes a single frame.
     pub execute_frame: ExecuteFrameHandle<'a, EXT, DB>,
     /// Frame call
-    pub call: FrameCallHandle<'a, EXT, DB>,
+    pub call: FrameAsyncCallHandle<'a, EXT, DB>,
     /// Call return
     pub call_return: FrameCallReturnHandle<'a, EXT, DB>,
     /// Insert call outcome
@@ -187,7 +204,7 @@ impl<'a, EXT, DB: Database> ExecutionHandler<'a, EXT, DB> {
 
     /// Call frame call handler.
     #[inline]
-    pub fn call(
+    pub async fn call(
         &self,
         context: &mut Context<EXT, DB>,
         inputs: Box<CallInputs>,

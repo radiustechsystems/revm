@@ -102,16 +102,9 @@ pub fn extcodecopy<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
         .set_data(memory_offset, code_offset, len, &code);
 }
 
-pub fn blockhash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
-    gas!(interpreter, gas::BLOCKHASH);
-    pop_top!(interpreter, number);
-
-    let number_u64 = as_u64_saturated!(number);
-    let Some(hash) = host.block_hash(number_u64) else {
-        interpreter.instruction_result = InstructionResult::FatalExternalError;
-        return;
-    };
-    *number = U256::from_be_bytes(hash.0);
+pub fn blockhash<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, _host: &mut H) {
+    let number = U256::from(0);
+    push!(interpreter, number);
 }
 
 pub fn sload<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {

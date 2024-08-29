@@ -14,7 +14,7 @@ pub fn validate_env<SPEC: Spec, DB: Database>(env: &Env) -> Result<(), EVMError<
 }
 
 /// Validates transaction against the state.
-pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
+pub async fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
 ) -> Result<(), EVMError<DB::Error>> {
     // load acc
@@ -23,7 +23,8 @@ pub fn validate_tx_against_state<SPEC: Spec, EXT, DB: Database>(
         .evm
         .inner
         .journaled_state
-        .load_account(tx_caller, &mut context.evm.inner.db, true)?;
+        .load_account(tx_caller, &mut context.evm.inner.db, true)
+        .await?;
 
     context
         .evm

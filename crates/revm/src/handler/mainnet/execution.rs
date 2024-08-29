@@ -14,6 +14,8 @@ use revm_interpreter::{
     EMPTY_SHARED_MEMORY,
 };
 use std::boxed::Box;
+use std::future::Future;
+use std::pin::Pin;
 
 /// Execute frame
 #[inline]
@@ -83,11 +85,14 @@ pub fn last_frame_return<SPEC: Spec, EXT, DB: Database>(
 
 /// Handle frame sub call.
 #[inline]
-pub fn call<SPEC: Spec, EXT, DB: Database>(
+pub async fn call<SPEC: Spec, EXT: std::marker::Send, DB: Database + std::marker::Send>(
     context: &mut Context<EXT, DB>,
     inputs: Box<CallInputs>,
-) -> Result<FrameOrResult, EVMError<DB::Error>> {
-    context.evm.make_call_frame(&inputs)
+) -> Pin<Box<dyn Future<Output = Result<FrameOrResult, EVMError<<DB as Database>::Error>>> + Send>>
+where
+    <DB as Database>::Error: Send,
+{
+    Box::pin(async move { context.evm.make_call_frame(&inputs).await })
 }
 
 #[inline]
@@ -122,11 +127,11 @@ pub fn insert_call_outcome<EXT, DB: Database>(
 
 /// Handle frame sub create.
 #[inline]
-pub fn create<SPEC: Spec, EXT, DB: Database>(
+pub async fn create<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
     inputs: Box<CreateInputs>,
 ) -> Result<FrameOrResult, EVMError<DB::Error>> {
-    context.evm.make_create_frame(SPEC::SPEC_ID, &inputs)
+    context.evm.make_create_frame(SPEC::SPEC_ID, &inputs).await
 }
 
 #[inline]
@@ -162,11 +167,14 @@ pub fn insert_create_outcome<EXT, DB: Database>(
 
 /// Handle frame sub create.
 #[inline]
-pub fn eofcreate<SPEC: Spec, EXT, DB: Database>(
+pub async fn eofcreate<SPEC: Spec, EXT, DB: Database>(
     context: &mut Context<EXT, DB>,
     inputs: Box<EOFCreateInputs>,
 ) -> Result<FrameOrResult, EVMError<DB::Error>> {
-    context.evm.make_eofcreate_frame(SPEC::SPEC_ID, &inputs)
+    context
+        .evm
+        .make_eofcreate_frame(SPEC::SPEC_ID, &inputs)
+        .await
 }
 
 #[inline]
